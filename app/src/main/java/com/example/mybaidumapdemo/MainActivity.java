@@ -14,6 +14,13 @@ import com.baidu.location.BDLocation;
 import com.baidu.location.BDLocationListener;
 import com.baidu.location.LocationClient;
 import com.baidu.location.LocationClientOption;
+import com.baidu.mapapi.SDKInitializer;
+import com.baidu.mapapi.map.BaiduMap;
+import com.baidu.mapapi.map.MapStatusUpdate;
+import com.baidu.mapapi.map.MapStatusUpdateFactory;
+import com.baidu.mapapi.map.MapView;
+import com.baidu.mapapi.map.MyLocationData;
+import com.baidu.mapapi.model.LatLng;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,13 +28,25 @@ import java.util.List;
 public class MainActivity extends AppCompatActivity {
     public LocationClient mLocationClient;
     private TextView tv_display_position;
+    private MapView mapView;
+    private BaiduMap baiduMap;
+    private boolean isFirstLocate = true;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mLocationClient = new LocationClient(getApplicationContext());
+        //注册定位监听类，定位信息回传到该类中处理
         mLocationClient.registerLocationListener(new MyLocationListener());
+        SDKInitializer.initialize(getApplicationContext());
         setContentView(R.layout.activity_main);
+        //获取文本控件
         tv_display_position = (TextView) findViewById(R.id.tv_display_position);
+        //获取地图控件
+        mapView = (MapView) findViewById(R.id.mapView);
+        // 获取地图操作控件
+        baiduMap = mapView.getMap();
+        baiduMap.setMyLocationEnabled(true);
+        //许可重要权限
         List<String> permissionList = new ArrayList<>();
         if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.
                 permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -60,6 +79,24 @@ public class MainActivity extends AppCompatActivity {
         mLocationClient.setLocOption(option);
     }
 
+    // 定位函数
+    private  void navigateTo(BDLocation location){
+        if (isFirstLocate){
+            LatLng ll=new LatLng(location.getAltitude(),location.getLongitude());
+            MapStatusUpdate update = MapStatusUpdateFactory.newLatLng(ll);
+            baiduMap.animateMapStatus(update);
+            update = MapStatusUpdateFactory.zoomTo(16f) ;
+            baiduMap.animateMapStatus(update);
+            isFirstLocate = false;
+        }
+        MyLocationData.Builder locationBuilder = new MyLocationData.Builder();
+        locationBuilder.latitude(location.getLatitude());
+        locationBuilder.longitude(location.getLongitude());
+        MyLocationData locationData = locationBuilder.build();
+        baiduMap.setMyLocationData(locationData);
+    }
+
+//许可结果返回处理
     @Override
     public void onRequestPermissionsResult(int requestCode,  String[] permissions,  int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -98,13 +135,28 @@ public class MainActivity extends AppCompatActivity {
             currentPosition.append("街道：").append(bdLocation.getStreet()).append("\n");
             currentPosition.append("地址：").append(bdLocation.getAddrStr()).append("\n");
             currentPosition.append("定位方式:");
+            //判断定位类型
             if (bdLocation.getLocType() == BDLocation.TypeGpsLocation) {
                 currentPosition.append("GPS");
+                navigateTo(bdLocation);
             } else if (bdLocation.getLocType() == BDLocation.TypeNetWorkLocation){
                 currentPosition.append("网络");
+                navigateTo(bdLocation);
             }
             tv_display_position.setText(currentPosition);
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        mapView.onResume();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        mapView.onPause();
     }
 
     @Override
@@ -112,6 +164,8 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
         //在activity执行onDestroy时执行mMapView.onDestroy()，实现地图生命周期管理
         mLocationClient.stop();
+        mapView.onDestroy();
+        baiduMap.setMyLocationEnabled(false);
 
     }
 
